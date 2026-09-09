@@ -17,6 +17,14 @@ on:
         description: "Path B: a requirement doc in this repo (e.g. docs/prd.md), or a Jira/Confluence URL. Leave empty if using 'objective'."
         required: false
         type: string
+      project:
+        description: "Test Manager project name — reused if it exists, created automatically if not. Leave empty to let kane-cli auto-pick a project."
+        required: false
+        type: string
+      folder:
+        description: "Test Manager folder name inside that project — same reuse-or-create behavior. Leave empty for no folder."
+        required: false
+        type: string
 
 jobs:
   run-flow:
@@ -48,11 +56,11 @@ jobs:
 
       - name: Run flow — objective mode
         if: ${{ github.event.inputs.objective != '' }}
-        run: ./kane-autonomous-flow.sh --objective "${{ github.event.inputs.objective }}" --url "${{ github.event.inputs.url }}"
+        run: ./kane-autonomous-flow.sh --objective "${{ github.event.inputs.objective }}" --url "${{ github.event.inputs.url }}" --project "${{ github.event.inputs.project }}" --folder "${{ github.event.inputs.folder }}"
 
       - name: Run flow — source mode
         if: ${{ github.event.inputs.source != '' }}
-        run: ./kane-autonomous-flow.sh --source "${{ github.event.inputs.source }}"
+        run: ./kane-autonomous-flow.sh --source "${{ github.event.inputs.source }}" --project "${{ github.event.inputs.project }}" --folder "${{ github.event.inputs.folder }}"
 
       - name: Upload logs, tests, and coverage
         if: always()

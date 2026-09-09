@@ -31,14 +31,17 @@ MODE=""
 SOURCE=""
 OBJECTIVE=""
 URL=""
+PROJECT_NAME=""
+FOLDER_NAME=""
 PARALLEL="${KANE_PARALLEL:-4}"
-RETRIES="${KANE_RETRIES:-3}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --source)    SOURCE="$2";    MODE="assurance"; shift 2 ;;
-    --objective) OBJECTIVE="$2"; MODE="direct";     shift 2 ;;
-    --url)       URL="$2";       shift 2 ;;
+    --source)    SOURCE="$2";       MODE="assurance"; shift 2 ;;
+    --objective) OBJECTIVE="$2";    MODE="direct";     shift 2 ;;
+    --url)       URL="$2";          shift 2 ;;
+    --project)   PROJECT_NAME="$2"; shift 2 ;;
+    --folder)    FOLDER_NAME="$2";  shift 2 ;;
     *) echo "Unknown arg: $1" >&2; exit 1 ;;
   esac
 done
@@ -53,6 +56,59 @@ WORKDIR="$(pwd)"
 LOG="$WORKDIR/kane-flow-$(date +%Y%m%d-%H%M%S).log"
 
 log() { echo "[$(date +%H:%M:%S)] $*" | tee -a "$LOG"; }
+
+resolve_or_create() {
+  # Generic "find by name, else create" for `kane-cli projects` / `folders`.
+  # No manual CLI step needed, ever — reuses an existing project/folder by
+  # exact name if one exists, creates it otherwise. Logs raw output so a
+  # field-name mismatch is fixable from the log alone.
+  local kind="$1" name="$2"   # kind = "projects" | "folders"
+  local listing="$WORKDIR/.${kind}-list-$$.json"
+  local created="$WORKDIR/.${kind}-create-$$.json"
+  local id_expr='(.id // .project_id // .folder_id // .cid)'
+
+  kane-cli "$kind" list --search "$name" --agent > "$listing" 2>>"$LOG" || true
+  log "$kind list --search \"$name\" raw output:"
+  cat "$listing" >> "$LOG"
+
+  local id
+  id=$(jq -s -r --arg name "$name" "[.[] | select(._meta != \"page\") | select(.name == \$name)] | .[0] | $id_expr // empty" "$listing")
+
+  if [[ -n "$id" && "$id" != "null" ]]; then
+    log "$kind '$name' already exists (id=$id) — reusing it."
+  else
+    log "$kind '$name' not found — creating it."
+    kane-cli "$kind" create "$name" --agent > "$created" 2>>"$LOG"
+    log "$kind create \"$name\" raw output:"
+    cat "$created" >> "$LOG"
+    id=$(jq -s -r "[.[] | select($id_expr != null)] | .[0] | $id_expr" "$created")
+  fi
+
+  rm -f "$listing" "$created"
+  if [[ -z "$id" || "$id" == "null" ]]; then
+    log "FATAL: could not resolve or create $kind '$name' — check the raw output above in $LOG."
+    exit 1
+  fi
+  echo "$id"
+}
+
+configure_project_folder() {
+  if [[ -n "$PROJECT_NAME" ]]; then
+    log "Resolving project: $PROJECT_NAME"
+    local pid
+    pid=$(resolve_or_create projects "$PROJECT_NAME")
+    kane-cli config project "$pid"
+    log "Project set to '$PROJECT_NAME' (id=$pid)."
+
+    if [[ -n "$FOLDER_NAME" ]]; then
+      log "Resolving folder: $FOLDER_NAME"
+      local fid
+      fid=$(resolve_or_create folders "$FOLDER_NAME")
+      kane-cli config folder "$fid"
+      log "Folder set to '$FOLDER_NAME' (id=$fid)."
+    fi
+  fi
+}
 
 auto_approve_pending() {
   # Pulls every unreviewed node and approves it — this is the scripted
@@ -79,6 +135,40 @@ auto_approve_pending() {
   rm -f "$pending" "$verdicts"
 }
 
+author_all_tests() {
+  # Authors every .testmuai/tests/*_test.md file, one at a time. A single
+  # flaky/buggy scenario (kane-cli's own bug-detection can fail a test on
+  # a real app defect) must not take down every other test — so failures
+  # here are logged and skipped, not fatal, unless ALL of them fail.
+  local extra_args=("$@")
+  local total=0 passed=0 failed=0
+  local failed_names=()
+  for f in .testmuai/tests/*_test.md; do
+    [[ -e "$f" ]] || continue
+    total=$((total + 1))
+    log "Authoring: $f"
+    set +e
+    kane-cli testmd run "$f" --agent --headless "${extra_args[@]}" 2>&1 | tee -a "$LOG"
+    local code=${PIPESTATUS[0]}
+    set -e
+    if [[ $code -eq 0 ]]; then
+      passed=$((passed + 1))
+    else
+      failed=$((failed + 1))
+      failed_names+=("$f")
+      log "Authoring FAILED for $f (exit $code) — continuing with the rest."
+    fi
+  done
+  log "Authoring summary: $passed/$total passed, $failed failed."
+  if [[ $failed -gt 0 ]]; then
+    log "Failed tests: ${failed_names[*]}"
+  fi
+  if [[ $total -gt 0 && $passed -eq 0 ]]; then
+    log "FATAL: every test failed to author — nothing to replay."
+    exit 1
+  fi
+}
+
 run_stage_exit3_is_fatal() {
   # For assurance commands, exit 3 = paused on a high-risk question.
   # With no human to answer it, we cannot proceed — fail loudly instead
@@ -97,6 +187,8 @@ run_stage_exit3_is_fatal() {
   fi
 }
 
+configure_project_folder
+
 if [[ "$MODE" == "direct" ]]; then
   # ================= Path A: objective-only, no requirement doc =================
   log "Generating test cases from objective..."
@@ -111,13 +203,10 @@ if [[ "$MODE" == "direct" ]]; then
   kane-cli generate --save --req "$REQ_ID" --agent | tee -a "$LOG"
 
   log "Authoring each saved test in a real browser..."
-  for f in .testmuai/tests/*_test.md; do
-    [[ -e "$f" ]] || continue
-    kane-cli testmd run "$f" --agent --headless --url "$URL" --retry --retry-count "$RETRIES"
-  done
+  author_all_tests --url "$URL"
 
   log "Batch replay..."
-  kane-cli testrun run .testmuai/tests --headless --parallel "$PARALLEL" --retry | tee -a "$LOG"
+  kane-cli testrun run .testmuai/tests --headless --parallel "$PARALLEL" | tee -a "$LOG"
 
 else
   # ================= Path B: requirement doc / Jira / Confluence =================
@@ -137,13 +226,10 @@ else
   auto_approve_pending
 
   log "Authoring each designed test once (real browser)..."
-  for f in .testmuai/tests/*_test.md; do
-    [[ -e "$f" ]] || continue
-    kane-cli testmd run "$f" --agent --headless --retry --retry-count "$RETRIES"
-  done
+  author_all_tests
 
   log "Batch replay..."
-  kane-cli testrun run --match 't-' --headless --parallel "$PARALLEL" --retry | tee -a "$LOG"
+  kane-cli testrun run --match 't-' --headless --parallel "$PARALLEL" | tee -a "$LOG"
 
   log "Coverage report (requirement -> test -> proven)..."
   kane-cli cover gaps --json > "$WORKDIR/coverage.json"
