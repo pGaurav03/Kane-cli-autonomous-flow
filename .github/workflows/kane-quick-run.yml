@@ -1,0 +1,35 @@
+name: Kane-CLI Quick Run
+
+# The simplest possible path: kane-cli run, one objective, one shot.
+# No generate (multi-scenario), no design, no {{url}} templating.
+on:
+  workflow_dispatch:
+    inputs:
+      objective:
+        description: "A single objective, e.g. 'Go to https://example.com and verify the page loads'"
+        required: true
+        type: string
+
+jobs:
+  quick-run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install kane-cli
+        run: npm install -g @testmuai/kane-cli
+
+      - name: Authenticate kane-cli
+        run: kane-cli login --username "${{ secrets.KANE_USERNAME }}" --access-key "${{ secrets.KANE_ACCESS_KEY }}"
+
+      - name: Run objective
+        env:
+          IN_OBJECTIVE: ${{ github.event.inputs.objective }}
+        run: kane-cli run "$IN_OBJECTIVE" --agent --headless
