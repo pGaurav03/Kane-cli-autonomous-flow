@@ -51,11 +51,20 @@ if [[ -z "$MODE" ]]; then
   exit 1
 fi
 
+# --url is required for --objective even if the objective text also names the
+# site directly: `generate` still stamps a {{url}} template on the saved
+# suite, and testmd run needs --url to resolve it — writing the literal URL
+# in the objective text alone is not enough.
+if [[ "$MODE" == "direct" && -z "$URL" ]]; then
+  echo "Error: --url is required with --objective (generate's saved tests need it to resolve their {{url}} template, regardless of what the objective text says)." >&2
+  exit 1
+fi
+
 export KANE_CLI_USER_AGENT="autonomous-flow"
 WORKDIR="$(pwd)"
 LOG="$WORKDIR/kane-flow-$(date +%Y%m%d-%H%M%S).log"
 
-log() { echo "[$(date +%H:%M:%S)] $*" | tee -a "$LOG"; }
+log() { echo "[$(date +%H:%M:%S)] $*" | tee -a "$LOG" >&2; }
 
 resolve_or_create() {
   # Generic "find by name, else create" for `kane-cli projects` / `folders`.

@@ -44,9 +44,12 @@ source: demo-prd.md
 
 `project` / `folder` (optional, both modes): a Test Manager project/folder name. If it already exists it's reused; if not, it's created automatically. Leave blank to let kane-cli auto-pick one.
 
-## ⚠️ The one rule that matters most: never write `{{url}}` literally in an objective
+## ⚠️ The two rules that matter most for objective mode
 
-Write the real address directly in the objective text — `Go to https://example.com and ...` — never the placeholder `{{url}}`. `{{...}}` syntax is for *data* variables kane-cli should treat as reusable inputs (like `{{username}}`); when the *entry URL itself* gets turned into `{{url}}`, kane-cli's variable resolution isn't reliable across every generated scenario, and a run can silently land on kane-cli's own sandbox site instead of yours. This bit us twice while building this repo — every reliable run here writes the URL out in full.
+1. **Always fill the `url` field, even if the objective text also names the site.** `kane-cli generate` stamps its own `{{url}}` template onto every test case it saves, regardless of what you wrote in the objective — and `testmd run` needs `--url` to resolve that template. This script now refuses to run objective mode without it (fails fast with a clear message) rather than silently landing on kane-cli's own sandbox site.
+2. **Never type the literal placeholder `{{url}}` into the objective text yourself.** Write the real address directly — `Go to https://example.com and ...` — not `Go to {{url}} and ...`. `{{...}}` is kane-cli's own templating syntax; typing it yourself just adds a second, redundant layer of the same variable.
+
+Both rules bit us while building this repo — the fix is: always pass `url`, never hand-type `{{url}}`.
 
 ## Where results actually live
 
