@@ -60,16 +60,20 @@ auto_approve_pending() {
   local pending="$WORKDIR/.pending-$$.json"
   local verdicts="$WORKDIR/.verdicts-$$.json"
   kane-cli context list --json --inferred > "$pending"
+  log "context list --json --inferred raw output:"
+  cat "$pending" >> "$LOG"
   local count
   # kane-cli emits NDJSON (one JSON object per line), not a single array —
-  # slurp with -s before treating it as one.
-  count=$(jq -s '[.[] | select(.ref != null)] | length' "$pending")
+  # slurp with -s before treating it as one. The identifying field's exact
+  # name isn't pinned by the docs, so try the plausible candidates in order.
+  local REF_EXPR='(.ref // .logical_id // .node_ref // .id // .cid)'
+  count=$(jq -s "[.[] | select($REF_EXPR != null)] | length" "$pending")
   if [[ "$count" -eq 0 ]]; then
     log "Nothing pending review."
     rm -f "$pending"
     return 0
   fi
-  jq -s '[.[] | select(.ref != null) | {ref: .ref, resolution: "approved"}]' "$pending" > "$verdicts"
+  jq -s "[.[] | select($REF_EXPR != null) | {ref: $REF_EXPR, resolution: \"approved\"}]" "$pending" > "$verdicts"
   log "Auto-approving $count pending item(s)."
   kane-cli context review --verdicts "$verdicts" --json | tee -a "$LOG"
   rm -f "$pending" "$verdicts"
@@ -113,7 +117,7 @@ if [[ "$MODE" == "direct" ]]; then
   done
 
   log "Batch replay..."
-  kane-cli testrun run .testmuai/tests --agent --headless --parallel "$PARALLEL" --retry | tee -a "$LOG"
+  kane-cli testrun run .testmuai/tests --headless --parallel "$PARALLEL" --retry | tee -a "$LOG"
 
 else
   # ================= Path B: requirement doc / Jira / Confluence =================
@@ -124,7 +128,7 @@ else
   auto_approve_pending
 
   log "Designing tests for every now-trusted use-case..."
-  UC_REFS=$(kane-cli context list --json | jq -r -s '.[] | select(.trust=="trusted") | .ref')
+  UC_REFS=$(kane-cli context list --json | jq -r -s '.[] | select(.trust=="trusted") | (.ref // .logical_id // .node_ref // .id // .cid)')
   for uc in $UC_REFS; do
     run_stage_exit3_is_fatal "design tests ($uc)" \
       kane-cli design tests --use-case "$uc" --mode agent --max 8
@@ -139,7 +143,7 @@ else
   done
 
   log "Batch replay..."
-  kane-cli testrun run --match 't-' --agent --headless --parallel "$PARALLEL" --retry | tee -a "$LOG"
+  kane-cli testrun run --match 't-' --headless --parallel "$PARALLEL" --retry | tee -a "$LOG"
 
   log "Coverage report (requirement -> test -> proven)..."
   kane-cli cover gaps --json > "$WORKDIR/coverage.json"
