@@ -1,0 +1,63 @@
+name: Kane-CLI Autonomous Flow
+
+# Manual trigger only — this drives a real browser and spends kane-cli
+# credits, so it should never fire on every push.
+on:
+  workflow_dispatch:
+    inputs:
+      objective:
+        description: "Plain objective (Path A). Leave empty if using 'source' instead."
+        required: false
+        type: string
+      url:
+        description: "Start URL — required only when 'objective' is set."
+        required: false
+        type: string
+      source:
+        description: "Path B: a requirement doc in this repo (e.g. docs/prd.md), or a Jira/Confluence URL. Leave empty if using 'objective'."
+        required: false
+        type: string
+
+jobs:
+  run-flow:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install kane-cli
+        run: npm install -g @testmuai/kane-cli
+
+      - name: Install jq
+        run: sudo apt-get update -y && sudo apt-get install -y jq
+
+      - name: Authenticate kane-cli
+        run: kane-cli login --username "${{ secrets.KANE_USERNAME }}" --access-key "${{ secrets.KANE_ACCESS_KEY }}"
+
+      - name: Make flow script executable
+        run: chmod +x kane-autonomous-flow.sh
+
+      - name: Run flow — objective mode
+        if: ${{ github.event.inputs.objective != '' }}
+        run: ./kane-autonomous-flow.sh --objective "${{ github.event.inputs.objective }}" --url "${{ github.event.inputs.url }}"
+
+      - name: Run flow — source mode
+        if: ${{ github.event.inputs.source != '' }}
+        run: ./kane-autonomous-flow.sh --source "${{ github.event.inputs.source }}"
+
+      - name: Upload logs, tests, and coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kane-flow-output
+          path: |
+            kane-flow-*.log
+            coverage.json
+            .testmuai/tests/**
+          if-no-files-found: ignore
