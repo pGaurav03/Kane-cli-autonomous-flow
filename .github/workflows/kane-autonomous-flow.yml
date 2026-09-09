@@ -56,11 +56,21 @@ jobs:
 
       - name: Run flow — objective mode
         if: ${{ github.event.inputs.objective != '' }}
-        run: ./kane-autonomous-flow.sh --objective "${{ github.event.inputs.objective }}" --url "${{ github.event.inputs.url }}" --project "${{ github.event.inputs.project }}" --folder "${{ github.event.inputs.folder }}"
+        env:
+          IN_OBJECTIVE: ${{ github.event.inputs.objective }}
+          IN_URL: ${{ github.event.inputs.url }}
+          IN_PROJECT: ${{ github.event.inputs.project }}
+          IN_FOLDER: ${{ github.event.inputs.folder }}
+        run: ./kane-autonomous-flow.sh --objective "$IN_OBJECTIVE" --url "$IN_URL" --project "$IN_PROJECT" --folder "$IN_FOLDER"
 
       - name: Run flow — source mode
         if: ${{ github.event.inputs.source != '' }}
-        run: ./kane-autonomous-flow.sh --source "${{ github.event.inputs.source }}" --url "${{ github.event.inputs.url }}" --project "${{ github.event.inputs.project }}" --folder "${{ github.event.inputs.folder }}"
+        env:
+          IN_SOURCE: ${{ github.event.inputs.source }}
+          IN_URL: ${{ github.event.inputs.url }}
+          IN_PROJECT: ${{ github.event.inputs.project }}
+          IN_FOLDER: ${{ github.event.inputs.folder }}
+        run: ./kane-autonomous-flow.sh --source "$IN_SOURCE" --url "$IN_URL" --project "$IN_PROJECT" --folder "$IN_FOLDER"
 
       - name: Upload logs, tests, and coverage
         if: always()
