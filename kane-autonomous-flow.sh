@@ -169,6 +169,43 @@ author_all_tests() {
   fi
 }
 
+design_all_use_cases() {
+  # Runs `design tests` once per trusted use-case ref (passed as args).
+  # A single use-case can fail on a kane-cli-side validation error (seen in
+  # practice: "every AC must be claimed by the step that proves it") — that
+  # must not kill designing for every other use-case. Only a genuine pause
+  # (exit 3, a high-risk question) or total failure stops the whole flow.
+  local total=0 designed=0 failed=0
+  local failed_names=()
+  for uc in "$@"; do
+    total=$((total + 1))
+    log "Designing tests for use-case: $uc"
+    set +e
+    kane-cli design tests --use-case "$uc" --mode agent --max 8 2>&1 | tee -a "$LOG"
+    local code=${PIPESTATUS[0]}
+    set -e
+    if [[ $code -eq 0 ]]; then
+      designed=$((designed + 1))
+    elif [[ $code -eq 3 ]]; then
+      failed=$((failed + 1))
+      failed_names+=("$uc (paused on a question no human is here to answer)")
+      log "Design PAUSED for $uc (exit 3) — skipping it, continuing with the rest."
+    else
+      failed=$((failed + 1))
+      failed_names+=("$uc")
+      log "Design FAILED for $uc (exit $code) — continuing with the rest."
+    fi
+  done
+  log "Design summary: $designed/$total use-cases designed, $failed failed."
+  if [[ $failed -gt 0 ]]; then
+    log "Failed use-cases: ${failed_names[*]}"
+  fi
+  if [[ $total -gt 0 && $designed -eq 0 ]]; then
+    log "FATAL: every use-case failed to design — nothing to author."
+    exit 1
+  fi
+}
+
 run_stage_exit3_is_fatal() {
   # For assurance commands, exit 3 = paused on a high-risk question.
   # With no human to answer it, we cannot proceed — fail loudly instead
@@ -218,10 +255,7 @@ else
 
   log "Designing tests for every now-trusted use-case..."
   UC_REFS=$(kane-cli context list --json | jq -r -s '.[] | select(.trust=="trusted") | (.ref // .logical_id // .node_ref // .id // .cid)')
-  for uc in $UC_REFS; do
-    run_stage_exit3_is_fatal "design tests ($uc)" \
-      kane-cli design tests --use-case "$uc" --mode agent --max 8
-  done
+  design_all_use_cases $UC_REFS
 
   auto_approve_pending
 
