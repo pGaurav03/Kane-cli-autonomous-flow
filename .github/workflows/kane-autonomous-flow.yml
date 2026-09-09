@@ -60,7 +60,7 @@ jobs:
 
       - name: Run flow — source mode
         if: ${{ github.event.inputs.source != '' }}
-        run: ./kane-autonomous-flow.sh --source "${{ github.event.inputs.source }}" --project "${{ github.event.inputs.project }}" --folder "${{ github.event.inputs.folder }}"
+        run: ./kane-autonomous-flow.sh --source "${{ github.event.inputs.source }}" --url "${{ github.event.inputs.url }}" --project "${{ github.event.inputs.project }}" --folder "${{ github.event.inputs.folder }}"
 
       - name: Upload logs, tests, and coverage
         if: always()

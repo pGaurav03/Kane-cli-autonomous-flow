@@ -143,7 +143,11 @@ author_all_tests() {
   local extra_args=("$@")
   local total=0 passed=0 failed=0
   local failed_names=()
-  for f in .testmuai/tests/*_test.md; do
+  : > "$WORKDIR/.authored-tests.list"
+  # generate --save nests files under a per-request subfolder
+  # (.testmuai/tests/<slug>-<id>/*_test.md), not directly in tests/ — find
+  # recurses, a bare glob doesn't.
+  while IFS= read -r f; do
     [[ -e "$f" ]] || continue
     total=$((total + 1))
     log "Authoring: $f"
@@ -153,12 +157,13 @@ author_all_tests() {
     set -e
     if [[ $code -eq 0 ]]; then
       passed=$((passed + 1))
+      echo "$f" >> "$WORKDIR/.authored-tests.list"
     else
       failed=$((failed + 1))
       failed_names+=("$f")
       log "Authoring FAILED for $f (exit $code) — continuing with the rest."
     fi
-  done
+  done < <(find .testmuai/tests -type f -name '*_test.md' | sort)
   log "Authoring summary: $passed/$total passed, $failed failed."
   if [[ $failed -gt 0 ]]; then
     log "Failed tests: ${failed_names[*]}"
@@ -243,7 +248,12 @@ if [[ "$MODE" == "direct" ]]; then
   author_all_tests --url "$URL"
 
   log "Batch replay..."
-  kane-cli testrun run .testmuai/tests --headless --parallel "$PARALLEL" | tee -a "$LOG"
+  if [[ -s "$WORKDIR/.authored-tests.list" ]]; then
+    mapfile -t AUTHORED_FILES < "$WORKDIR/.authored-tests.list"
+    kane-cli testrun run "${AUTHORED_FILES[@]}" --headless --parallel "$PARALLEL" | tee -a "$LOG"
+  else
+    log "No successfully authored tests to replay — skipping batch replay."
+  fi
 
 else
   # ================= Path B: requirement doc / Jira / Confluence =================
@@ -260,7 +270,11 @@ else
   auto_approve_pending
 
   log "Authoring each designed test once (real browser)..."
-  author_all_tests
+  if [[ -n "$URL" ]]; then
+    author_all_tests --url "$URL"
+  else
+    author_all_tests
+  fi
 
   log "Batch replay..."
   kane-cli testrun run --match 't-' --headless --parallel "$PARALLEL" | tee -a "$LOG"

@@ -1,4 +1,4 @@
-# SauceDemo — Shopping Cart & Checkout
+# SauceDemo — Login and Navigation
 
 **Product:** SauceDemo (https://www.saucedemo.com)
 **Test account:** username `standard_user`, password `secret_sauce`
@@ -6,27 +6,23 @@
 ## 1. Login
 
 A registered user can log in with a valid username and password and lands on
-the Products page, which lists all available items.
+the Products page, which lists all available items with a name, price, and
+"Add to cart" button for each.
 
-## 2. Add to Cart
+## 2. Product Sorting
 
-From the Products page, a user can add any item to their cart by clicking
-"Add to cart" on that item. The cart icon in the top-right badges with the
-current item count, and the button changes to "Remove".
+On the Products page, a user can sort the product list using the sort
+dropdown, with options including "Name (A to Z)", "Name (Z to A)", "Price
+(low to high)", and "Price (high to low)". Selecting an option reorders the
+visible product list accordingly.
 
-## 3. Remove from Cart
+## 3. Product Details
 
-A user can remove an item they previously added, either from the Products
-page or from the Cart page. Removing the last item returns the cart badge to
-empty (no number shown).
+Clicking a product's name or image from the Products page opens that
+product's detail page, showing its name, description, price, and an image.
+A "Back to products" button returns to the Products page.
 
-## 4. View Cart
+## 4. Logout
 
-Clicking the cart icon opens the Cart page, which lists every item currently
-added along with its name, price, and quantity.
-
-## 5. Checkout
-
-From the Cart page, a user can proceed to checkout by providing first name,
-last name, and zip code. After confirming the order, the user sees an order
-confirmation screen with the message "Thank you for your order!".
+From the Products page, opening the menu (hamburger icon, top-left) and
+clicking "Logout" signs the user out and returns to the login page.
