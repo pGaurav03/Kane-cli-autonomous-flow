@@ -282,6 +282,10 @@ else
   log "Coverage report (requirement -> test -> proven)..."
   kane-cli cover gaps --json > "$WORKDIR/coverage.json"
   log "Coverage written to $WORKDIR/coverage.json"
+
+  log "Traceability graph (visual HTML, requirement -> use-case -> test)..."
+  kane-cli context view --no-open --out "$WORKDIR/traceability.html" 2>&1 | tee -a "$LOG" || true
+  log "Traceability graph written to $WORKDIR/traceability.html"
 fi
 
 log "Flow complete. Full log: $LOG"

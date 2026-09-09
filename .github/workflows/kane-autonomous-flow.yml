@@ -80,5 +80,6 @@ jobs:
           path: |
             kane-flow-*.log
             coverage.json
+            traceability.html
             .testmuai/tests/**
           if-no-files-found: ignore
