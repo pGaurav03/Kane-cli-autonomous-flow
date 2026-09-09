@@ -61,13 +61,15 @@ auto_approve_pending() {
   local verdicts="$WORKDIR/.verdicts-$$.json"
   kane-cli context list --json --inferred > "$pending"
   local count
-  count=$(jq 'length' "$pending")
+  # kane-cli emits NDJSON (one JSON object per line), not a single array —
+  # slurp with -s before treating it as one.
+  count=$(jq -s '[.[] | select(.ref != null)] | length' "$pending")
   if [[ "$count" -eq 0 ]]; then
     log "Nothing pending review."
     rm -f "$pending"
     return 0
   fi
-  jq '[.[] | {ref: .ref, resolution: "approved"}]' "$pending" > "$verdicts"
+  jq -s '[.[] | select(.ref != null) | {ref: .ref, resolution: "approved"}]' "$pending" > "$verdicts"
   log "Auto-approving $count pending item(s)."
   kane-cli context review --verdicts "$verdicts" --json | tee -a "$LOG"
   rm -f "$pending" "$verdicts"
@@ -122,7 +124,7 @@ else
   auto_approve_pending
 
   log "Designing tests for every now-trusted use-case..."
-  UC_REFS=$(kane-cli context list --json | jq -r '.[] | select(.trust=="trusted") | .ref')
+  UC_REFS=$(kane-cli context list --json | jq -r -s '.[] | select(.trust=="trusted") | .ref')
   for uc in $UC_REFS; do
     run_stage_exit3_is_fatal "design tests ($uc)" \
       kane-cli design tests --use-case "$uc" --mode agent --max 8
